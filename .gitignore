@@ -1,0 +1,17 @@
+# Compiled QNX ELF binaries
+aurasentry
+ai_sim
+test_jitter
+*.o
+
+# Generated QEMU disk images & build artifacts
+vm-target/output/
+*.vmdk
+*.raw
+*.bin
+
+# OS / Python cache
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

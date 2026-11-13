@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AuraPulse QNX 8.0 | Mixed-Criticality Surgical & Cobot Sentinel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #090d16; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 0.75rem; }
+    .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+  </style>
+</head>
+<body class="p-6 max-w-7xl mx-auto">
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-gray-800">
+    <div>
+      <div class="flex items-center gap-3">
+        <span class="px-2.5 py-1 text-xs font-bold tracking-wider uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded">QNX SDP 8.0 RTOS</span>
+        <span class="text-xs text-gray-400 mono">/dev/aurasentry • SCHED_FIFO Prio 50</span>
+      </div>
+      <h1 class="text-2xl font-bold text-white mt-2">AuraPulse Mixed-Criticality Safety Sentinel</h1>
+      <p class="text-sm text-gray-400">Deterministic Microkernel Isolation for Edge AI Robotics &amp; Surgical Actuators</p>
+    </div>
+    <div id="state-badge" class="px-5 py-3 rounded-xl font-bold text-lg tracking-wide border mono bg-emerald-500/10 text-emerald-400 border-emerald-500/40">
+      INITIALIZING...
+    </div>
+  </div>
+
+  <!-- KPI Row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
+    <div class="card p-4">
+      <div class="text-xs text-gray-400 uppercase">Last Cycle Jitter</div>
+      <div id="kpi-jitter" class="text-2xl font-bold text-cyan-400 mono mt-1">0.00 µs</div>
+      <div id="kpi-avg-jitter" class="text-xs text-gray-500 mono mt-1">Avg: 0.00 µs</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-gray-400 uppercase">Deterministic Cycles</div>
+      <div id="kpi-cycles" class="text-2xl font-bold text-white mono mt-1">0</div>
+      <div class="text-xs text-gray-500 mono mt-1">500 Hz Kernel Pulse</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-gray-400 uppercase">Kinematic Clamps</div>
+      <div id="kpi-clamps" class="text-2xl font-bold text-amber-400 mono mt-1">0</div>
+      <div class="text-xs text-gray-500 mono mt-1">Limit: 0.050 mm/cycle</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-gray-400 uppercase">Watchdog Trips</div>
+      <div id="kpi-watchdog" class="text-2xl font-bold text-rose-400 mono mt-1">0</div>
+      <div id="kpi-silence" class="text-xs text-gray-500 mono mt-1">AI Silence: 0 ms</div>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Vector Envelope Visualizer -->
+    <div class="card p-5 lg:col-span-1 flex flex-col items-center">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-300 self-start mb-3">Actuator Safety Envelope (X/Y)</h2>
+      <canvas id="vectorCanvas" width="280" height="280" class="bg-gray-950 rounded-lg border border-gray-800"></canvas>
+      <div class="w-full mt-4 text-xs mono space-y-1">
+        <div class="flex justify-between"><span class="text-rose-400">AI Requested ?(x,y):</span><span id="vec-req">[0.0000, 0.0000]</span></div>
+        <div class="flex justify-between"><span class="text-emerald-400">QNX Clamped ?(x,y):</span><span id="vec-safe">[0.0000, 0.0000]</span></div>
+      </div>
+    </div>
+
+    <!-- Live Jitter Oscilloscope -->
+    <div class="card p-5 lg:col-span-2 flex flex-col">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-300">Real-Time Kernel Wakeup Jitter (µs)</h2>
+        <span class="text-xs text-cyan-400 mono">SIGEV_PULSE_INIT Telemetry</span>
+      </div>
+      <canvas id="jitterCanvas" width="680" height="240" class="w-full bg-gray-950 rounded-lg border border-gray-800"></canvas>
+      
+      <!-- Fault Injection Controls -->
+      <div class="mt-5 pt-4 border-t border-gray-800">
+        <div class="flex justify-between items-center mb-3">
+          <div class="text-xs font-semibold uppercase tracking-wider text-gray-400">Live Microkernel Fault &amp; Stress Injection</div>
+          <div id="action-status" class="text-xs text-cyan-400 mono">Ready</div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <button onclick="inject('normal', 'Normal 50 Hz AI Feed')" class="px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 active:scale-95 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-semibold transition cursor-pointer">
+            1. Normal AI Feed
+          </button>
+          <button onclick="inject('hallucinate', 'AI Hallucination Spike')" class="px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 active:scale-95 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold transition cursor-pointer">
+            2. AI Hallucination
+          </button>
+          <button onclick="inject('cpuhog', '4x 100% CPU Stress')" class="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 active:scale-95 text-purple-300 border border-purple-500/40 rounded-lg text-xs font-semibold transition cursor-pointer">
+            3. 4x 100% CPU Hog
+          </button>
+          <button onclick="inject('crash', 'AI Process Killed')" class="px-3 py-2 bg-rose-600/20 hover:bg-rose-600/30 active:scale-95 text-rose-300 border border-rose-500/40 rounded-lg text-xs font-semibold transition cursor-pointer">
+            4. Kill AI Process
+          </button>
+          <button onclick="inject('restart_sentry', 'Reset /dev/aurasentry')" class="px-3 py-2 bg-gray-700/40 hover:bg-gray-700/60 active:scale-95 text-gray-200 border border-gray-600 rounded-lg text-xs font-semibold transition cursor-pointer">
+            Reset Sentry
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const jitterHistory = Array(80).fill(0);
+
+    async function inject(action, label) {
+      const statusEl = document.getElementById('action-status');
+      statusEl.textContent = `Sending: ${label}...`;
+      statusEl.className = 'text-xs text-amber-400 mono';
+      try {
+        const res = await fetch(`/api/inject/${action}`, { method: 'POST' });
+        if (res.ok) {
+          statusEl.textContent = `Active: ${label}`;
+          statusEl.className = 'text-xs text-emerald-400 mono';
+        } else {
+          statusEl.textContent = `Failed (${res.status}) - Check bridge.py terminal`;
+          statusEl.className = 'text-xs text-rose-400 mono';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Error: Open via http://localhost:8080';
+        statusEl.className = 'text-xs text-rose-400 mono';
+      }
+    }
+
+    function drawVector(req, safe) {
+      const c = document.getElementById('vectorCanvas');
+      const ctx = c.getContext('2d');
+      const cx = c.width / 2, cy = c.height / 2;
+      ctx.clearRect(0, 0, c.width, c.height);
+
+      ctx.strokeStyle = '#1f2937';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, 0); ctx.lineTo(cx, c.height);
+      ctx.moveTo(0, cy); ctx.lineTo(c.width, cy);
+      ctx.stroke();
+
+      const safeRadius = 55;
+      ctx.strokeStyle = '#10b981';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, safeRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const scale = safeRadius / 0.050;
+      const rx = Math.max(-130, Math.min(130, req[0] * scale));
+      const ry = Math.max(-130, Math.min(130, -req[1] * scale));
+      const sx = safe[0] * scale;
+      const sy = -safe[1] * scale;
+
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + rx, cy + ry);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + sx, cy + sy);
+      ctx.stroke();
+    }
+
+    function drawJitter() {
+      const c = document.getElementById('jitterCanvas');
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+
+      const maxVal = Math.max(500, ...jitterHistory);
+      ctx.strokeStyle = '#22d3ee';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      jitterHistory.forEach((val, i) => {
+        const x = (i / (jitterHistory.length - 1)) * c.width;
+        const y = c.height - 20 - ((val / maxVal) * (c.height - 40));
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch('/api/telemetry');
+        const data = await res.json();
+
+        const badge = document.getElementById('state-badge');
+        badge.textContent = data.state;
+        if (data.state === 'SAFE_TRACKING') {
+          badge.className = 'px-5 py-3 rounded-xl font-bold text-lg tracking-wide border mono bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
+        } else if (data.state === 'OVERRIDE_CLAMPED') {
+          badge.className = 'px-5 py-3 rounded-xl font-bold text-lg tracking-wide border mono bg-amber-500/10 text-amber-400 border-amber-500/40';
+        } else {
+          badge.className = 'px-5 py-3 rounded-xl font-bold text-lg tracking-wide border mono bg-rose-500/10 text-rose-400 border-rose-500/40';
+        }
+
+        document.getElementById('kpi-jitter').textContent = `${data.jitter_us.last.toFixed(2)} µs`;
+        document.getElementById('kpi-avg-jitter').textContent = `Avg: ${data.jitter_us.avg.toFixed(2)} µs`;
+        document.getElementById('kpi-cycles').textContent = data.cycles.toLocaleString();
+        document.getElementById('kpi-clamps').textContent = data.clamps.toLocaleString();
+        document.getElementById('kpi-watchdog').textContent = data.watchdog_trips.toLocaleString();
+        document.getElementById('kpi-silence').textContent = `AI Silence: ${data.ai_silence_ms} ms`;
+
+        document.getElementById('vec-req').textContent = `[${data.req[0].toFixed(4)}, ${data.req[1].toFixed(4)}]`;
+        document.getElementById('vec-safe').textContent = `[${data.safe[0].toFixed(4)}, ${data.safe[1].toFixed(4)}]`;
+
+        jitterHistory.push(data.jitter_us.last);
+        jitterHistory.shift();
+
+        drawVector(data.req, data.safe);
+        drawJitter();
+      } catch (e) {}
+    }
+
+    setInterval(poll, 100);
+  </script>
+</body>
+</html>
